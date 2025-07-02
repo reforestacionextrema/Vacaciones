@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Vacaciones RE</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Roboto', sans-serif;
+      background: linear-gradient(to right, #1a4d2e, #4caf50);
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    .login-container {
+      background: white;
+      padding: 2rem;
+      border-radius: 10px;
+      box-shadow: 0 0 20px rgba(0,0,0,0.2);
+      width: 100%;
+      max-width: 400px;
+      text-align: center;
+    }
+    .login-container img {
+      max-width: 200px;
+      margin-bottom: 1rem;
+    }
+    h1 {
+      color: #1a4d2e;
+      margin-bottom: 2rem;
+    }
+    button, input {
+      font-size: 1rem;
+      border-radius: 5px;
+      margin-top: 1rem;
+      width: 100%;
+      box-sizing: border-box;
+      font-family: 'Roboto', sans-serif;
+    }
+    input {
+      background-color: white;
+      color: black;
+      border: 1px solid #ccc;
+      padding: 0.75rem 1rem;
+    }
+    button {
+      padding: 0.75rem 1rem;
+      border: none;
+      cursor: pointer;
+    }
+    .login-button {
+      background-color: #1a4d2e;
+      color: white;
+    }
+    .google-button {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: white;
+      color: #444;
+      border: 1px solid #ccc;
+      font-weight: bold;
+    }
+    .google-button img {
+      width: 20px;
+      height: 20px;
+      margin-right: 10px;
+    }
+    .error {
+      color: red;
+      margin-top: 1rem;
+    }
+  </style>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyCKaMDGTSblZJ6ZdtBy4F8lBH8ZQdWSiw8",
+      authDomain: "rex-vacaciones.firebaseapp.com",
+      databaseURL: "https://rex-vacaciones-default-rtdb.firebaseio.com",
+      projectId: "rex-vacaciones",
+      storageBucket: "rex-vacaciones.appspot.com",
+      messagingSenderId: "919755172448",
+      appId: "1:919755172448:web:3ed268536ae199f7a67105",
+      measurementId: "G-Q8CX1R0RXY"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    const auth = firebase.auth();
+
+    function loginConGoogle() {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      auth.signInWithPopup(provider)
+        .then(({ user }) => {
+          if (!user.email.endsWith('@reforestacionextrema.org')) {
+            alert('Solo se permiten correos del dominio @reforestacionextrema.org');
+            auth.signOut();
+            return;
+          }
+          const key = user.email.split('@')[0].replace(/[.#$\[\]]/g, '_');
+          db.ref('usuarios/' + key).once('value').then(snapshot => {
+            if (snapshot.exists()) {
+              const usuarioData = snapshot.val();
+              localStorage.setItem('usuarioActivo', JSON.stringify(usuarioData));
+              if (usuarioData.isAdmin) {
+                window.location.href = 'rex-vacaciones.html';
+              } else {
+                window.location.href = 'usuario.html';
+              }
+            } else {
+              alert('Tu correo es válido, pero aún no estás registrado en la base de datos.');
+              auth.signOut();
+            }
+          });
+        })
+        .catch(error => {
+          console.error(error);
+          document.getElementById('error').textContent = 'Error en el inicio de sesión con Google';
+        });
+    }
+
+    function loginManual(event) {
+  event.preventDefault();
+  const email = document.getElementById('user').value.trim();
+  const pass  = document.getElementById('pass').value.trim();
+  const errorEl = document.getElementById('error');
+  errorEl.textContent = '';
+
+  // ← AGREGAR ESTE BLOQUE
+  if (email === 'admin@reforestacionextrema.org') {
+    // Sólo comprobamos contraseña aquí
+    auth.signInWithEmailAndPassword(email, pass)
+      .then(({ user }) => {
+        // Almacenamos un objeto mínimo para admin
+        const adminData = {
+          usuario: 'admin',
+          nombre: 'Administrador',
+          isAdmin: true
+        };
+        localStorage.setItem('usuarioActivo', JSON.stringify(adminData));
+        window.location.href = 'rex-vacaciones.html';
+      })
+      .catch(err => {
+        console.error(err);
+        errorEl.textContent = 'Credenciales de administrador incorrectas';
+      });
+    return;
+  }
+  // FIN DEL BLOQUE A AGREGAR ←
+
+  // Resto de tu lógica para usuarios normales
+  auth.signInWithEmailAndPassword(email, pass)
+    .then(({ user }) => {
+      if (!user.email.endsWith('@reforestacionextrema.org')) {
+        errorEl.textContent = 'Solo correos @reforestacionextrema.org';
+        auth.signOut();
+        return;
+      }
+      const key = user.email.split('@')[0].replace(/[.#$\[\]]/g, '_');
+      db.ref('usuarios/' + key).once('value').then(snapshot => {
+        if (snapshot.exists()) {
+          const usuarioData = snapshot.val();
+          localStorage.setItem('usuarioActivo', JSON.stringify(usuarioData));
+          if (usuarioData.isAdmin) window.location.href = 'rex-vacaciones.html';
+          else                    window.location.href = 'usuario.html';
+        } else {
+          errorEl.textContent = 'Usuario no encontrado en la base de datos';
+          auth.signOut();
+        }
+      });
+    })
+    .catch(err => {
+      console.error(err);
+      errorEl.textContent = 'Credenciales incorrectas';
+    });
+}
+  </script>
+</head>
+<body>
+  <div class="login-container">
+    <img src="assets/creamos-futuro.png" alt="Logo RE">
+    <h1>Portal de Vacaciones RE</h1>
+    <form onsubmit="loginManual(event)">
+      <input type="text" id="user" placeholder="Correo electrónico">
+      <input type="password" id="pass" placeholder="Contraseña">
+      <button type="submit" class="login-button">Iniciar sesión</button>
+    </form>
+    <p style="margin: 1rem 0;">o</p>
+    <button class="google-button" onclick="loginConGoogle()">
+      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google logo">
+      Inicia sesión con Google
+    </button>
+    <p id="error" class="error"></p>
+  </div>
+</body>
+</html>

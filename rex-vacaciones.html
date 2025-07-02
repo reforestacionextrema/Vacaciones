@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panel de Administrador</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Roboto', sans-serif;
+      background: linear-gradient(to right, #1a4d2e, #4caf50);
+      margin: 0;
+      padding: 0;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: white;
+      padding: 1rem 2rem;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    header h1 {
+      color: #1a4d2e;
+      margin: 0;
+    }
+    .logout button {
+      background-color: #b00020;
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+    main {
+      max-width: 1200px;
+      margin: 2rem auto;
+      padding: 1rem;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    }
+    h2 {
+      color: #1a4d2e;
+      margin-top: 2rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+    }
+    .toggle-icon {
+      font-size: 1.2rem;
+      margin-right: 0.5rem;
+    }
+    label, input, button, select, textarea {
+      display: block;
+      width: 100%;
+      margin-top: 0.5rem;
+      margin-bottom: 1rem;
+      padding: 0.5rem;
+      font-size: 1rem;
+      box-sizing: border-box;
+    }
+    button {
+      background-color: #1a4d2e;
+      color: white;
+      border: none;
+      cursor: pointer;
+      border-radius: 5px;
+    }
+    .btn-crear {
+      width: auto;
+      padding: 0.5rem 1.5rem;
+      margin-top: 1rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 2rem;
+    }
+    table, th, td {
+      border: 1px solid #ccc;
+    }
+    th, td {
+      padding: 0.75rem;
+      text-align: left;
+    }
+    th {
+      background-color: #e8f5e9;
+    }
+    .acciones {
+      position: relative;
+    }
+    .panel-acciones {
+      display: none;
+      position: absolute;
+      background: #fff;
+      border: 1px solid #ccc;
+      padding: 1rem;
+      box-shadow: 0 0 5px rgba(0,0,0,0.2);
+      z-index: 10;
+      width: 250px;
+    }
+    .panel-acciones input {
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    .panel-acciones .botones {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+    .acciones.active .panel-acciones {
+      display: block;
+    }
+    .collapsible {
+      display: none;
+    }
+  </style>
+<script>
+  const sesion = JSON.parse(localStorage.getItem('usuarioActivo'));
+  // sólo necesitas que exista la sesión y la propiedad isAdmin === true
+  if (!sesion || !sesion.isAdmin) {
+    window.location.href = 'login.html';
+  }
+</script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      document.querySelectorAll('section').forEach(section => {
+        const header = section.querySelector('h2');
+        const container = document.createElement('span');
+        container.style.display = 'flex';
+        container.style.alignItems = 'center';
+        container.innerHTML = `<span class="toggle-icon">▼</span><span style="margin-left: 0.5rem;">${header.textContent}</span>`;
+        header.textContent = '';
+        header.appendChild(container);
+        const content = section.querySelector('.collapsible');
+        header.addEventListener('click', () => {
+          if (content) {
+            const visible = content.style.display !== 'none';
+            content.style.display = visible ? 'none' : 'block';
+            container.querySelector('.toggle-icon').textContent = visible ? '►' : '▼';
+          }
+        });
+      });
+    });
+  </script>
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyCKaMDGTSblZJ6ZdtBy4F8lBH8ZQdWSiw8",
+      authDomain: "rex-vacaciones.firebaseapp.com",
+      databaseURL: "https://rex-vacaciones-default-rtdb.firebaseio.com",
+      projectId: "rex-vacaciones",
+      storageBucket: "rex-vacaciones.appspot.com",
+      messagingSenderId: "919755172448",
+      appId: "1:919755172448:web:3ed268536ae199f7a67105",
+      measurementId: "G-Q8CX1R0RXY"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    function cerrarSesion() {
+      localStorage.removeItem('usuarioActivo');
+      window.location.href = 'login.html';
+    }
+
+    function crearUsuario() {
+      const nombre = document.getElementById('nombre').value.trim();
+      const usuario = document.getElementById('usuario').value.trim();
+      const correo = document.getElementById('correo').value.trim();
+      const contrasena = document.getElementById('contrasena').value.trim();
+      const ingreso = document.getElementById('fecha-ingreso').value;
+
+      if (!nombre || !usuario || !correo || !contrasena || !ingreso) {
+        alert('Por favor complete todos los campos correctamente.');
+        return;
+      }
+
+      const dias = calcularDiasPorAntiguedad(ingreso);
+      const renovacion = calcularRenovacion(ingreso);
+
+      if (isNaN(dias) || !renovacion) {
+        alert('Por favor complete todos los campos correctamente.');
+        return;
+      }
+
+      const nuevoUsuario = { nombre, usuario, correo, contrasena, ingreso, dias, usados: 0, renovacion };
+      const usuarioKey = usuario.replace(/[.#$\[\]]/g, '_');
+      db.ref('usuarios/' + usuarioKey).set(nuevoUsuario, error => {
+        if (error) {
+          alert('Error al guardar el usuario.');
+        } else {
+          alert('Usuario creado exitosamente.');
+          cargarUsuarios();
+        }
+      });
+    }
+        
+function calcularRenovacion(ingreso) {
+  const fechaIngreso = new Date(ingreso);
+  const hoy = new Date();
+  let siguienteRenovacion = new Date(fechaIngreso);
+  siguienteRenovacion.setFullYear(siguienteRenovacion.getFullYear() + 1);
+
+  while (siguienteRenovacion <= hoy) {
+    siguienteRenovacion.setFullYear(siguienteRenovacion.getFullYear() + 1);
+  }
+
+  return siguienteRenovacion.toISOString().split('T')[0];
+}
+
+    function calcularDiasPorAntiguedad(fechaIngreso) {
+  if (!fechaIngreso) return 0;
+
+  const ingreso = new Date(fechaIngreso);
+  const hoy = new Date();
+  let anios = hoy.getFullYear() - ingreso.getFullYear();
+
+  const mesActual = hoy.getMonth();
+  const diaActual = hoy.getDate();
+  const mesIngreso = ingreso.getMonth();
+  const diaIngreso = ingreso.getDate();
+
+  if (mesActual < mesIngreso || (mesActual === mesIngreso && diaActual < diaIngreso)) {
+    anios--; 
+  }
+
+  if (anios < 1) return 12;
+  if (anios === 1) return 12;
+  if (anios === 2) return 14;
+  if (anios === 3) return 16;
+  if (anios === 4) return 18;
+  if (anios === 5) return 20;
+
+  const bloquesDe5Anios = Math.floor((anios - 5) / 5);
+  return 20 + (bloquesDe5Anios + 1) * 2;
+}
+
+    function verificarRenovacion(usuario, key) {
+  const hoy = new Date();
+  const fechaRenovacion = new Date(usuario.renovacion);
+  fechaRenovacion.setHours(0, 0, 0, 0);
+
+  if (fechaRenovacion <= hoy) {
+    const nuevaRenovacion = calcularRenovacion(usuario.ingreso);
+    const nuevosDias = calcularDiasPorAntiguedad(usuario.ingreso);
+    db.ref(`usuarios/${key}`).update({
+      usados: 0,
+      renovacion: nuevaRenovacion,
+      dias: nuevosDias
+    });
+  }
+}
+
+    function cargarUsuarios() {
+      const tabla = document.getElementById('tabla-usuarios');
+      tabla.innerHTML = '';
+      db.ref('usuarios').once('value').then(snapshot => {
+        const data = snapshot.val();
+        if (data) {
+          Object.entries(data).forEach(([key, usuario]) => {
+            verificarRenovacion(usuario, key);
+            const row = document.createElement('tr');
+            row.innerHTML = `
+              <td>${usuario.nombre}</td>
+              <td>${usuario.correo}</td>
+              <td>${usuario.usuario}</td>
+              <td>${usuario.dias}</td>
+              <td>${usuario.usados}</td>
+              <td>${usuario.renovacion}</td>
+              <td>${usuario.ingreso || ''}</td>
+              <td class="acciones">
+                <button type="button" onclick="mostrarPanel(this)">Editar</button>
+                <div class="panel-acciones">
+                  <label>Días usados</label>
+                  <input type="number" value="${usuario.usados}" id="usados-${usuario.usuario}">
+                  <label>Fecha de ingreso</label>
+                  <input type="date" value="${usuario.ingreso || ''}" id="ingreso-${usuario.usuario}">
+                    <div class="botones">
+                      <button onclick="guardarCambios('${usuario.usuario}')">Guardar</button>
+                      <button onclick="eliminarUsuario('${usuario.usuario}')">Eliminar</button>
+                  </div>
+                </div>
+
+              </td>
+            `;
+            tabla.appendChild(row);
+          });
+        }
+      });
+    }
+
+    function guardarCambios(usuario) {
+  const key = usuario.replace(/[.#$\[\]]/g, '_');
+  const usados = parseInt(document.getElementById(`usados-${usuario}`).value);
+  const ingreso = document.getElementById(`ingreso-${usuario}`).value;
+  const renovacion = calcularRenovacion(ingreso);
+  const diasCalculados = calcularDiasPorAntiguedad(ingreso);
+
+  db.ref('usuarios/' + key).update({
+    dias: diasCalculados,
+    usados,
+    renovacion,
+    ingreso
+  }).then(() => cargarUsuarios());
+}
+
+    function eliminarUsuario(usuario) {
+      if (!confirm('¿Eliminar este usuario?')) return;
+      const key = usuario.replace(/[.#$\[\]]/g, '_');
+      db.ref(`usuarios/${key}`).remove().then(cargarUsuarios);
+    }
+
+    function cargarSolicitudes() {
+      const tbody = document.getElementById('tabla-solicitudes');
+      tbody.innerHTML = '';
+      db.ref('solicitudes').once('value').then(snapshot => {
+        const data = snapshot.val();
+        if (data) {
+          Object.entries(data).forEach(([key, solicitud]) => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+              <td>${solicitud.usuario}</td>
+              <td>${solicitud.inicio}</td>
+              <td>${solicitud.fin}</td>
+              <td>${solicitud.estado}</td>
+              <td class="acciones">
+                <button onclick="mostrarPanel(this)">Acciones</button>
+                <div class="panel-acciones">
+                  <button onclick="eliminarSolicitud('${key}')">Eliminar</button>
+                </div>
+              </td>`;
+            tbody.appendChild(row);
+          });
+        }
+      });
+    }
+
+    function mostrarPanel(btn) {
+      document.querySelectorAll('.acciones').forEach(el => el.classList.remove('active'));
+      btn.parentElement.classList.toggle('active');
+    }
+
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest('.acciones')) {
+        document.querySelectorAll('.acciones').forEach(el => el.classList.remove('active'));
+      }
+    });
+
+    function eliminarSolicitud(key) {
+      db.ref(`solicitudes/${key}`).remove().then(cargarSolicitudes);
+    }
+
+    window.onload = () => {
+      cargarUsuarios();
+      cargarSolicitudes();
+    };
+  </script>
+</head>
+<body>
+<header>
+  <h1>Panel de Administrador</h1>
+  <div class="logout">
+    <button onclick="cerrarSesion()">Salir</button>
+  </div>
+</header>
+<main>
+  <section id="crear-usuario">
+    <h2>Crear nuevo usuario</h2>
+    <div class="collapsible" style="display: block;">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+        <div><label for="nombre">Nombre completo</label><input type="text" id="nombre"></div>
+        <div><label for="usuario">Nombre de usuario</label><input type="text" id="usuario"></div>
+        <div><label for="correo">Correo electrónico</label><input type="email" id="correo"></div>
+        <div><label for="contrasena">Contraseña</label><input type="password" id="contrasena"></div>
+        <div><label for="fecha-ingreso">Fecha de ingreso</label><input type="date" id="fecha-ingreso"></div>
+      </div>
+      <div style="display: flex; justify-content: center;">
+        <button class="btn-crear" onclick="crearUsuario()">Crear usuario</button>
+      </div>
+    </div>
+  </section>
+  <section id="panel-usuarios">
+    <h2>Usuarios</h2>
+    <div class="collapsible" style="display: block;">
+      <table>
+        <thead>
+          <tr>
+            <th>Nombre</th>
+            <th>Correo</th>
+            <th>Usuario</th>
+            <th>Días</th>
+            <th>Usados</th>
+            <th>Renovación</th>
+            <th>Ingreso</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tabla-usuarios"></tbody>
+      </table>
+    </div>
+  </section>
+  <section id="panel-solicitudes">
+    <h2>Solicitudes de Vacaciones</h2>
+    <div class="collapsible" style="display: block;">
+      <table>
+        <thead>
+          <tr>
+            <th>Usuario</th>
+            <th>Inicio</th>
+            <th>Fin</th>
+            <th>Estado</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tabla-solicitudes"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+</body>
+</html>

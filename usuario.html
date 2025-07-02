@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panel del Usuario - REX Vacaciones</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Roboto', sans-serif;
+      background: linear-gradient(to right, #1a4d2e, #4caf50);
+      margin: 0;
+      padding: 0;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: white;
+      padding: 1rem 2rem;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    header img {
+      height: 50px;
+    }
+    .cerrar-sesion {
+      display: flex;
+      align-items: center;
+    }
+    .cerrar-sesion button {
+      background-color: #b00020;
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    main {
+      max-width: 800px;
+      margin: 2rem auto;
+      padding: 1rem;
+    }
+    h1, h2 {
+      color: #1a4d2e;
+    }
+    .info, .solicitud, .historial, .cambio-pass {
+      background: white;
+      padding: 1.5rem;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      margin-bottom: 2rem;
+    }
+    label, input, button {
+      display: block;
+      width: 100%;
+      margin-bottom: 1rem;
+      padding: 0.75rem;
+      font-size: 1rem;
+      box-sizing: border-box;
+    }
+    input[type="date"] {
+      max-width: 250px;
+    }
+    button {
+      background-color: #1a4d2e;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    .error {
+      color: red;
+      margin-top: -0.5rem;
+      margin-bottom: 1rem;
+    }
+    .success {
+      color: green;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 0.75rem;
+      text-align: left;
+    }
+    th {
+      background-color: #e8f5e9;
+    }
+    button:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
+    }
+  </style>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <script>
+    const sesion = JSON.parse(localStorage.getItem('usuarioActivo'));
+    if (!sesion || !sesion.usuario) {
+      window.location.href = 'login.html';
+    }
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCKaMDGTSblZJ6ZdtBy4F8lBH8ZQdWSiw8",
+      authDomain: "rex-vacaciones.firebaseapp.com",
+      databaseURL: "https://rex-vacaciones-default-rtdb.firebaseio.com",
+      projectId: "rex-vacaciones",
+      storageBucket: "rex-vacaciones.appspot.com",
+      messagingSenderId: "919755172448",
+      appId: "1:919755172448:web:3ed268536ae199f7a67105",
+      measurementId: "G-Q8CX1R0RXY"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    function cerrarSesion() {
+      localStorage.removeItem('usuarioActivo');
+      window.location.href = 'login.html';
+    }
+
+    function cargarDatosUsuario() {
+      const hoy = new Date();
+      const renovacion = new Date(sesion.renovacion);
+
+      if (hoy >= renovacion) {
+        const key = sesion.usuario.replace(/[.#$\[\]]/g, '_');
+        renovacion.setFullYear(renovacion.getFullYear() + 1);
+        const nuevaFecha = renovacion.toISOString().split('T')[0];
+
+        db.ref(`usuarios/${key}`).update({ usados: 0, renovacion: nuevaFecha }).then(() => {
+          sesion.usados = 0;
+          sesion.renovacion = nuevaFecha;
+          localStorage.setItem('usuarioActivo', JSON.stringify(sesion));
+          location.reload();
+        });
+        return;
+      }
+
+      document.getElementById('nombreUsuario').textContent = sesion.nombre;
+      document.getElementById('diasTotales').textContent = sesion.dias;
+      document.getElementById('diasUsados').textContent = sesion.usados;
+      document.getElementById('diasRestantes').textContent = sesion.dias - sesion.usados;
+      document.getElementById('fechaRenovacion').textContent = sesion.renovacion || 'No especificada';
+
+      db.ref('solicitudes').orderByChild('usuario').equalTo(sesion.usuario).once('value').then(snapshot => {
+        const tbody = document.getElementById('tabla-solicitudes');
+        tbody.innerHTML = '';
+        const hoy = new Date().toISOString().split('T')[0];
+
+        snapshot.forEach(child => {
+          const solicitud = child.val();
+          const esEditable = hoy < solicitud.inicio;
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td>${solicitud.inicio}</td>
+            <td>${solicitud.fin}</td>
+            <td>${solicitud.estado}</td>
+            <td><button onclick="cancelarSolicitud('${child.key}', ${contarDiasHabiles(solicitud.inicio, solicitud.fin)})" ${!esEditable ? 'disabled' : ''}>Eliminar</button></td>
+          `;
+          tbody.appendChild(row);
+        });
+      });
+    }
+
+    function contarDiasHabiles(inicio, fin) {
+      const start = new Date(inicio);
+      const end = new Date(fin);
+      let dias = 0;
+      while (start <= end) {
+        if (start.getDay() !== 0) dias++;
+        start.setDate(start.getDate() + 1);
+      }
+      return dias;
+    }
+
+    function cancelarSolicitud(id, dias) {
+      if (confirm('¿Seguro que deseas eliminar esta solicitud?')) {
+        db.ref('solicitudes/' + id).once('value').then(snapshot => {
+          const solicitud = snapshot.val();
+          if (!solicitud) return;
+          const hoy = new Date().toISOString().split('T')[0];
+          if (hoy >= solicitud.inicio) return alert('No puedes eliminar una solicitud que ya comenzó.');
+
+          db.ref('solicitudes/' + id).remove().then(() => {
+            const key = sesion.usuario.replace(/[.#$\[\]]/g, '_');
+            const nuevosUsados = sesion.usados - dias;
+            db.ref(`usuarios/${key}/usados`).set(nuevosUsados).then(() => {
+              sesion.usados = nuevosUsados;
+              localStorage.setItem('usuarioActivo', JSON.stringify(sesion));
+              notificarGoogleCalendar(sesion.nombre, solicitud.inicio, solicitud.fin, 'eliminar');
+              location.reload();
+            });
+          });
+        });
+      }
+    }
+
+    function enviarSolicitud() {
+      const inicio = document.getElementById('inicio').value;
+      const fin = document.getElementById('fin').value;
+      const mensaje = document.getElementById('mensajeSolicitud');
+
+      if (!inicio || !fin) {
+        mensaje.textContent = 'Por favor completa ambas fechas.';
+        return;
+      }
+
+      const fechaInicio = new Date(inicio);
+      const fechaFin = new Date(fin);
+      const hoy = new Date();
+      hoy.setHours(0, 0, 0, 0);
+
+      if (fechaInicio < hoy) {
+        mensaje.textContent = 'No puedes solicitar vacaciones con fecha pasada.';
+        return;
+      }
+
+      const anticipacionMinima = 14;
+      const diferenciaDias = Math.ceil((fechaInicio - hoy) / (1000 * 60 * 60 * 24));
+
+      if (diferenciaDias < anticipacionMinima) {
+        mensaje.textContent = `Debes solicitar tus vacaciones con al menos ${anticipacionMinima} días de anticipación.`;
+        return;
+      }
+
+      if (fechaInicio > fechaFin) {
+        mensaje.textContent = 'La fecha de inicio debe ser antes de la fecha de fin.';
+        return;
+      }
+
+      const diasSolicitados = contarDiasHabiles(inicio, fin);
+      const restantes = sesion.dias - sesion.usados;
+
+      if (diasSolicitados > restantes) {
+        mensaje.textContent = 'No tienes suficientes días disponibles.';
+        return;
+      }
+
+      db.ref('solicitudes').orderByChild('usuario').equalTo(sesion.usuario).once('value').then(snapshot => {
+        let traslape = false;
+        snapshot.forEach(child => {
+          const solicitud = child.val();
+          const ini = new Date(solicitud.inicio);
+          const fin = new Date(solicitud.fin);
+
+          if ((fechaInicio <= fin && fechaInicio >= ini) || (fechaFin <= fin && fechaFin >= ini) || (fechaInicio <= ini && fechaFin >= fin)) {
+            traslape = true;
+          }
+        });
+
+        if (traslape) {
+          mensaje.textContent = 'Ya tienes una solicitud en esas fechas.';
+          return;
+        }
+
+        const nueva = {
+          usuario: sesion.usuario,
+          inicio,
+          fin,
+          estado: 'Aprobado'
+        };
+
+        const key = db.ref().child('solicitudes').push().key;
+        db.ref('solicitudes/' + key).set(nueva).then(() => {
+          const usuarioKey = sesion.usuario.replace(/[.#$\[\]]/g, '_');
+          db.ref(`usuarios/${usuarioKey}/usados`).set(sesion.usados + diasSolicitados).then(() => {
+            sesion.usados += diasSolicitados;
+            localStorage.setItem('usuarioActivo', JSON.stringify(sesion));
+            mensaje.className = 'success';
+            mensaje.textContent = 'Solicitud enviada correctamente.';
+            cargarDatosUsuario();
+            notificarGoogleCalendar(sesion.nombre, inicio, fin, 'agregar');
+          });
+        });
+      });
+    }
+
+    function cambiarContrasena() {
+      const nueva = document.getElementById('nueva-pass').value;
+      if (nueva.length < 6) {
+        alert('La contraseña debe tener al menos 6 caracteres.');
+        return;
+      }
+      const key = sesion.usuario.replace(/[.#$\[\]]/g, '_');
+      db.ref('usuarios/' + key + '/contrasena').set(nueva).then(() => {
+        alert('Contraseña actualizada.');
+        document.getElementById('nueva-pass').value = '';
+      });
+    }
+
+function notificarGoogleCalendar(usuario, inicio, fin, accion) {
+  fetch("https://script.google.com/macros/s/AKfycby65ffzLXVhL1pxGUC0bUufn5egY8G9S_35LnJ_GP1v-2zNg6c2k2sM1uZ2xSK7rxWd/exec", {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ usuario, inicio, fin, accion })
+  });
+}
+
+
+    window.onload = cargarDatosUsuario;
+  </script>
+</head>
+<body>
+  <header>
+    <img src="assets/creamos-futuro.png" alt="Logo RE">
+    <div class="cerrar-sesion">
+      <button onclick="cerrarSesion()">Cerrar sesión</button>
+    </div>
+  </header>
+  <main>
+    <section class="info">
+      <h2>Bienvenido, <span id="nombreUsuario"></span></h2>
+      <p><strong>Días totales:</strong> <span id="diasTotales"></span></p>
+      <p><strong>Días usados:</strong> <span id="diasUsados"></span></p>
+      <p><strong>Días restantes:</strong> <span id="diasRestantes"></span></p>
+      <p><strong>Fecha de renovación:</strong> <span id="fechaRenovacion"></span></p>
+    </section>
+
+    <section class="solicitud">
+      <h2>Solicitar Vacaciones</h2>
+      <label for="inicio">Fecha de inicio</label>
+      <input type="date" id="inicio">
+
+      <label for="fin">Fecha de fin</label>
+      <input type="date" id="fin">
+
+      <button onclick="enviarSolicitud()">Enviar solicitud</button>
+      <p id="mensajeSolicitud" class="error"></p>
+    </section>
+
+    <section class="historial">
+      <h2>Historial de solicitudes</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Inicio</th>
+            <th>Fin</th>
+            <th>Estado</th>
+            <th>Acción</th>
+          </tr>
+        </thead>
+        <tbody id="tabla-solicitudes"></tbody>
+      </table>
+    </section>
+
+    <section class="cambio-pass">
+      <h2>Cambiar contraseña</h2>
+      <label for="nueva-pass">Nueva contraseña</label>
+      <input type="password" id="nueva-pass">
+      <button onclick="cambiarContrasena()">Actualizar contraseña</button>
+    </section>
+  </main>
+</body>
+</html>
