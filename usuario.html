@@ -97,7 +97,7 @@
   <script>
     const sesion = JSON.parse(localStorage.getItem('usuarioActivo'));
     if (!sesion || !sesion.usuario) {
-      window.location.href = 'login.html';
+      window.location.href = 'index.html';
     }
 
     const firebaseConfig = {
@@ -116,7 +116,7 @@
 
     function cerrarSesion() {
       localStorage.removeItem('usuarioActivo');
-      window.location.href = 'login.html';
+      window.location.href = 'index.html';
     }
 
     function cargarDatosUsuario() {
