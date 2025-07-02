@@ -122,7 +122,7 @@
   const sesion = JSON.parse(localStorage.getItem('usuarioActivo'));
   // sólo necesitas que exista la sesión y la propiedad isAdmin === true
   if (!sesion || !sesion.isAdmin) {
-    window.location.href = 'login.html';
+    window.location.href = 'index.html';
   }
 </script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
@@ -164,7 +164,7 @@
 
     function cerrarSesion() {
       localStorage.removeItem('usuarioActivo');
-      window.location.href = 'login.html';
+      window.location.href = 'index.html';
     }
 
     function crearUsuario() {
